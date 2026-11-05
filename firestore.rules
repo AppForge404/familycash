@@ -1,14 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Hanya akun yang emailnya ada di daftar ini yang boleh membaca/menulis.
-    // GANTI dengan email anggota keluarga Anda (huruf kecil semua).
-    match /{document=**} {
-      allow read, write: if request.auth != null
-        && request.auth.token.email in [
-          'suami@email.com',
-          'istri@email.com'
-        ];
+
+    // Akun keluarga bersama (dibuat otomatis oleh aplikasi saat "Buat PIN").
+    // PIN = kata sandi akun ini, diperiksa oleh Firebase Auth.
+    function keluarga() {
+      return request.auth != null
+        && request.auth.token.email == 'keluarga@familycash.app';
+    }
+
+    function txValid(d) {
+      return d.t in ['in', 'out']
+        && d.a is number && d.a > 0
+        && d.d is string && d.d.size() == 10
+        && d.w in ['0', '1', '2', '3']
+        && d.k is string && d.k.size() <= 500
+        && (d.t == 'in' || d.c in ['0', '1', '2']);
+    }
+
+    match /tx/{id} {
+      allow read, delete: if keluarga();
+      allow create, update: if keluarga() && txValid(request.resource.data);
+    }
+
+    match /settings/{id} {
+      allow read: if keluarga();
+      allow write: if keluarga()
+        && request.resource.data.names is list
+        && request.resource.data.names.size() == 4
+        && request.resource.data.cats is list
+        && request.resource.data.cats.size() == 3;
     }
   }
 }

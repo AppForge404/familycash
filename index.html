@@ -41,7 +41,7 @@ small,.note{color:var(--mut);font-size:.82rem}
 .seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink);box-shadow:0 4px 12px rgba(23,58,51,.25)}
 .rk{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line);gap:8px}.rk:last-child{border:0}.rk span:last-child{font-weight:700;text-align:right}
 </style></head><body>
-<div id="login"><div class="card"><h1>Family<span style="color:var(--gold)">Cash</span></h1><p>Masuk untuk melanjutkan</p><div class="f"><label>Email<input id="em" type="email" autocomplete="username" placeholder="nama@email.com"></label><label>Kata sandi<input id="pw" type="password" autocomplete="current-password"></label><button id="bl" class="in">Masuk</button></div><div class="msg" id="lmsg"></div></div></div>
+<div id="login"><div class="card"><h1>Family<span style="color:var(--gold)">Cash</span></h1><p id="lt">Masukkan PIN untuk melanjutkan</p><div class="f"><label>PIN<input id="pw" type="password" autocomplete="current-password" placeholder="Minimal 6 karakter"></label><label id="pw2l" class="hide">Ulangi PIN<input id="pw2" type="password" autocomplete="new-password"></label><button id="bl" class="in">Masuk</button><button id="bm" class="ghost" type="button">Pertama kali? Buat PIN</button></div><div class="msg" id="lmsg"></div></div></div>
 <div id="app" class="wrap hide">
 <header><div><h1>Family<span style="color:var(--gold)">Cash</span></h1><small>Keuangan keluarga, tercatat rapi</small></div><button id="out" class="ghost">Keluar</button></header>
 <div class="seg" id="who"></div>
@@ -59,13 +59,15 @@ small,.note{color:var(--mut);font-size:.82rem}
 <div class="msg" id="hmsg"></div><p class="note" id="st"></p></section>
 <section class="card adm" id="set"><h2>Pengaturan admin</h2><div class="f"><b>Nama anggota</b><div class="g2" id="nmb"></div><b>Nama kategori</b><div class="g2" id="ctb"></div><button id="bn" class="ghost">Simpan nama</button><div class="msg" id="mn"></div>
 
+<label>PIN baru<input id="np" type="password" autocomplete="new-password" placeholder="Minimal 6 karakter"></label><button id="bq" class="ghost">Ganti PIN</button><div class="msg" id="mq"></div>
 <h2 style="margin-top:8px">Cadangan data</h2><button id="bx" class="ghost">Ekspor cadangan (JSON)</button><div class="msg" id="mx"></div><p class="note">Untuk memulihkan: unggah berkas cadangan ini ke Claude dan minta data dipulihkan. Data disimpan di Firebase Firestore.</p></div></section>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,updatePassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import{getFirestore,doc,collection,setDoc,deleteDoc,onSnapshot}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyAZid3NWEBDveZkc1GdSWK5Kh_jrt5Flu8",authDomain:"familycash-79ce4.firebaseapp.com",projectId:"familycash-79ce4",storageBucket:"familycash-79ce4.firebasestorage.app",messagingSenderId:"757272432722",appId:"1:757272432722:web:6dc82e494fa5361ac54f8b"};
+const FAMILY="keluarga@familycash.app";
 const fapp=initializeApp(firebaseConfig),auth=getAuth(fapp),fdb=getFirestore(fapp);
 async function saveFile(name,data){const b=data instanceof Blob?data:new Blob([data]);const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 const DL={save:({filename,data})=>saveFile(filename,data)};
@@ -201,8 +203,16 @@ async function makeXls(){
  }catch(e){if(e&&e.code==='declined')show('hmsg','Unduhan dibatalkan.');else show('hmsg','Gagal membuat Excel'+(e&&(e.code||e.message)?' ('+(e.code||e.message)+')':'')+'.')}}
 function view(){$('login').classList.toggle('hide',!!role);$('app').classList.toggle('hide',!role);if(role)render()}
 function init(){
- const go=async()=>{show('lmsg','Memeriksa…',true);try{await signInWithEmailAndPassword(auth,$('em').value.trim(),$('pw').value);$('pw').value='';show('lmsg','')}catch(e){show('lmsg',e&&e.code==='auth/network-request-failed'?'Tidak ada koneksi internet.':'Email atau kata sandi salah.')}};
- $('bl').onclick=go;$('pw').onkeydown=e=>{if(e.key==='Enter')go()};$('out').onclick=()=>signOut(auth);
+ let mk=false;
+ const mode=m=>{mk=m;$('pw2l').classList.toggle('hide',!m);$('bl').textContent=m?'Buat PIN':'Masuk';$('bm').textContent=m?'Sudah punya PIN? Masuk':'Pertama kali? Buat PIN';$('lt').textContent=m?'Buat PIN keluarga (minimal 6 karakter)':'Masukkan PIN untuk melanjutkan';show('lmsg','')};
+ const go=async()=>{const p=$('pw').value;
+  if(p.length<6){show('lmsg','PIN minimal 6 karakter.');return}
+  if(mk&&p!==$('pw2').value){show('lmsg','Kedua PIN tidak sama.');return}
+  show('lmsg','Memeriksa…',true);
+  try{if(mk)await createUserWithEmailAndPassword(auth,FAMILY,p);else await signInWithEmailAndPassword(auth,FAMILY,p);$('pw').value=$('pw2').value='';show('lmsg','')}
+  catch(e){const c=e&&e.code;show('lmsg',c==='auth/network-request-failed'?'Tidak ada koneksi internet.':c==='auth/email-already-in-use'?'PIN sudah pernah dibuat. Silakan masuk.':c==='auth/operation-not-allowed'?'Login belum diaktifkan di Firebase (Email/Password).':mk?'Gagal membuat PIN'+(c?' ('+c+')':'')+'.':'PIN salah.')}};
+ $('bl').onclick=go;$('bm').onclick=()=>mode(!mk);$('pw').onkeydown=$('pw2').onkeydown=e=>{if(e.key==='Enter')go()};
+ $('out').onclick=()=>signOut(auth);
  $('di').value=$('do').value=today();
  ['ai','ao'].forEach(id=>$(id).oninput=e=>{const n=digits(e.target.value);e.target.value=n?n.toLocaleString('id-ID'):''});
  $('si').onclick=()=>add('in');$('so').onclick=()=>add('out');
@@ -211,6 +221,7 @@ function init(){
  $('pdf').onclick=makePdf;$('xls').onclick=makeXls;$('bx').onclick=exportJson;
  document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;pend=null;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));list()});
  $('rows').onclick=e=>{const b=e.target.closest('.del');if(b&&role==='admin')del(b.dataset.id)};
+ $('bq').onclick=async()=>{const v=$('np').value;if(v.length<6){show('mq','PIN minimal 6 karakter.');return}try{await updatePassword(auth.currentUser,v);$('np').value='';show('mq','PIN diganti.',true)}catch(e){show('mq',e&&e.code==='auth/requires-recent-login'?'Keluar lalu masuk lagi, kemudian ulangi.':'Gagal mengganti PIN'+(e&&e.code?' ('+e.code+')':'')+'.')}};
  $('bn').onclick=async()=>{const n=D.names.map((_,k)=>$('sn'+k).value.trim()),c=D.cats.map((_,k)=>$('sc'+k).value.trim());
   if(n.concat(c).some(v=>!v)){show('mn','Semua nama harus diisi.');return}
   if(new Set(n.map(v=>v.toLowerCase())).size<4||new Set(c.map(v=>v.toLowerCase())).size<3){show('mn','Nama tidak boleh ada yang sama.');return}
