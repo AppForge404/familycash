@@ -68,6 +68,7 @@ import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmail
 import{getFirestore,doc,collection,setDoc,deleteDoc,onSnapshot}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyAZid3NWEBDveZkc1GdSWK5Kh_jrt5Flu8",authDomain:"familycash-79ce4.firebaseapp.com",projectId:"familycash-79ce4",storageBucket:"familycash-79ce4.firebasestorage.app",messagingSenderId:"757272432722",appId:"1:757272432722:web:6dc82e494fa5361ac54f8b"};
 const FAMILY="keluarga@familycash.app";
+const ADMIN="admin@familycash.app";
 const fapp=initializeApp(firebaseConfig),auth=getAuth(fapp),fdb=getFirestore(fapp);
 async function saveFile(name,data){const b=data instanceof Blob?data:new Blob([data]);const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 const DL={save:({filename,data})=>saveFile(filename,data)};
@@ -209,7 +210,18 @@ function init(){
   if(p.length<6){show('lmsg','PIN minimal 6 karakter.');return}
   if(mk&&p!==$('pw2').value){show('lmsg','Kedua PIN tidak sama.');return}
   show('lmsg','Memeriksa…',true);
-  try{if(mk)await createUserWithEmailAndPassword(auth,FAMILY,p);else await signInWithEmailAndPassword(auth,FAMILY,p);$('pw').value=$('pw2').value='';show('lmsg','')}
+  try{
+   if(mk){await createUserWithEmailAndPassword(auth,FAMILY,p)}
+   else{
+    try{await signInWithEmailAndPassword(auth,FAMILY,p)}
+    catch(e1){
+     if(e1&&(e1.code==='auth/wrong-password'||e1.code==='auth/invalid-credential'||e1.code==='auth/invalid-login-credentials')){
+      await signInWithEmailAndPassword(auth,ADMIN,p)
+     }else throw e1
+    }
+   }
+   $('pw').value=$('pw2').value='';show('lmsg','')
+  }
   catch(e){const c=e&&e.code;show('lmsg',c==='auth/network-request-failed'?'Tidak ada koneksi internet.':c==='auth/email-already-in-use'?'PIN sudah pernah dibuat. Silakan masuk.':c==='auth/operation-not-allowed'?'Login belum diaktifkan di Firebase (Email/Password).':mk?'Gagal membuat PIN'+(c?' ('+c+')':'')+'.':'PIN salah.')}};
  $('bl').onclick=go;$('bm').onclick=()=>mode(!mk);$('pw').onkeydown=$('pw2').onkeydown=e=>{if(e.key==='Enter')go()};
  $('out').onclick=()=>signOut(auth);
